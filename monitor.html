@@ -30,23 +30,22 @@
         let camadaPontos = L.layerGroup();
         let polylineRota;
         
-        // COLE AQUI O MESMO LINK DO SEU GOOGLE APPS SCRIPT (/exec)
-        const urlAPI = "https://script.google.com/macros/s/AKfycbygOoGsONp8AgOZok2o3_zrmkpHig_srvtVauTUl9_YyRfrFfWa5ZDo3nsFBAJw2Hp-Xw/exec";
+        // COLE AQUI O SEU LINK DO GOOGLE APPS SCRIPT (/exec)
+        const urlAPI = "https://script.google.com/macros/s/AKfycbyADoxrMyOWvqi2jIQHVSNbdACr7lkJOwRtVseOcQB_/dev";
 
         function initMap() {
             map = L.map('map').setView([-12.9632, -38.4085], 15);
 
-            // Camada OpenStreetMap ajustada com identificação de uso para evitar erro 403
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // Substituído por CartoDB Voyager para evitar bloqueio 403 do OpenStreetMap direto
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 maxZoom: 19,
-                attribution: '© OpenStreetMap contributors',
-                maxNativeZoom: 19
+                attribution: '© OpenStreetMap contributors & CARTO'
             }).addTo(map);
 
             camadaPontos.addTo(map);
             
             atualizarPainel();
-            setInterval(atualizarPainel, 15000); // Atualiza o painel a cada 15s para não sobrecarregar as requisições de mapa
+            setInterval(atualizarPainel, 15000); // Atualiza o painel a cada 15 segundos
         }
 
         function atualizarPainel() {
@@ -58,14 +57,12 @@
 
                         const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
                         
-                        // Desenha a linha azul da rota
                         if (!polylineRota) {
                             polylineRota = L.polyline(latLngs, { color: 'blue', weight: 4, opacity: 0.6 }).addTo(map);
                         } else {
                             polylineRota.setLatLngs(latLngs);
                         }
 
-                        // Adiciona os pontos numerados (0 verde na partida, 1, 2, 3... nos demais)
                         latLngs.forEach((coord, index) => {
                             let iconeNumero = L.divIcon({
                                 className: 'numero-ponto',
@@ -79,7 +76,6 @@
                              .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${dados[index].timestamp}`);
                         });
 
-                        // Posiciona o carrinho no último ponto atualizado
                         const pontoAtualCarro = latLngs[latLngs.length - 1];
                         const ultimoDado = dados[dados.length - 1];
 
@@ -97,7 +93,7 @@
                         });
 
                         if (!markerCarro) {
-                            markerCarro = L.marker(pontoAtualCarro, { icon: iconeCarro }).addTo(map).bindPopup("Posição Atual do Veículo").openPopup();
+                            markerCarro = L.marker(pontoAtualCarro, { icon: iconeCarro }).addTo(map).bindPopup("Veículo").openPopup();
                         } else {
                             markerCarro.setLatLng(pontoAtualCarro);
                         }
