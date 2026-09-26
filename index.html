@@ -2,84 +2,127 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transmissor GPS Veicular</title>
+    <title>Painel de Monitoramento - Rota do Veículo</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; margin: 0; }
-        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { color: #333; margin-bottom: 20px; }
-        button { width: 100%; padding: 15px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        #btnIniciar { background-color: #28a745; }
-        #btnParar { background-color: #dc3545; display: none; }
-        #status { font-size: 16px; color: #666; margin-top: 15px; font-weight: bold; }
-        #coords { font-size: 13px; color: #888; margin-top: 10px; }
+        html, body, #map { height: 100%; margin: 0; padding: 0; }
+        #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
+        
+        /* Estilo da bolinha numerada para os pontos do histórico */
+        .numero-ponto {
+            background: white;
+            border: 1px solid #333;
+            border-radius: 50%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #000;
+            line-height: 16px;
+        }
+
+        /* Estilo visual destacado para o ícone do carro em tempo real */
+        .custom-car-icon {
+            font-size: 24px;
+            text-align: center;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
     </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h2>Rastreador Veicular</h2>
-        <button id="btnIniciar" onclick="iniciarViagem()">🟢 Iniciar Viagem</button>
-        <button id="btnParar" onclick="pararViagem()">🔴 Parar Viagem</button>
-        <div id="status">Status: Aguardando início...</div>
-        <div id="coords">Lat/Lng: --</div>
-    </div>
+    <div id="info">Aguardando início da viagem...</div>
+    <div id="map"></div>
 
     <script>
-        // COLE AQUI O SEU LINK ATUALIZADO DO GOOGLE APPS SCRIPT (/exec)
-        const urlAPI = "https://script.google.com/macros/s/AKfycbygOoGsONp8AgOZok2o3_zrmkpHig_srvtVauTUl9_YyRfrFfWa5ZDo3nsFBAJw2Hp-Xw/exec";
-        let intervaloID = null;
+        let map;
+        let markerCarro = null;
+        let camadaPontos = L.layerGroup();
+        let polylineRota;
+        
+        // COLE AQUI O SEU LINK DO GOOGLE APPS SCRIPT (/exec)
+        const urlAPI = "https://script.google.com/macros/s/AKfycbyADoxrMyOWvqi2jIQHVSNbdACr7lkJOwRtVseOcQB_/dev";
 
-        function iniciarViagem() {
-            document.getElementById("status").innerText = "Iniciando e limpando planilha...";
+        function initMap() {
+            map = L.map('map').setView([-12.9632, -38.4085], 15);
+
+            // Servidor de mapas livre de bloqueios 403
+            L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+                maxZoom: 20,
+                attribution: '© OpenStreetMap France | © OpenStreetMap contributors'
+            }).addTo(map);
+
+            camadaPontos.addTo(map);
             
-            fetch(urlAPI, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ acao: "iniciar" })
-            }).then(() => {
-                document.getElementById("btnIniciar").style.display = "none";
-                document.getElementById("btnParar").style.display = "block";
-                document.getElementById("status").innerText = "Status: Transmitindo (5s)...";
-                
-                capturarEEnviar();
-                // Envio a cada 5 segundos cravados
-                intervaloID = setInterval(capturarEEnviar, 5000);
-            }).catch(err => {
-                document.getElementById("status").innerText = "Erro ao iniciar!";
-                console.error(err);
-            });
+            atualizarPainel();
+            setInterval(atualizarPainel, 15000); // Atualiza o painel a cada 15 segundos para proteger contra excesso de requisições
         }
 
-        function pararViagem() {
-            clearInterval(intervaloID);
-            document.getElementById("btnParar").style.display = "none";
-            document.getElementById("btnIniciar").style.display = "block";
-            document.getElementById("status").innerText = "Status: Viagem Encerrada.";
+        function atualizarPainel() {
+            fetch(urlAPI)
+                .then(response => response.json())
+                .then(dados => {
+                    if (Array.isArray(dados) && dados.length > 0) {
+                        camadaPontos.clearLayers();
+
+                        const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
+                        
+                        // Desenha ou atualiza a linha azul da rota completa
+                        if (!polylineRota) {
+                            polylineRota = L.polyline(latLngs, { color: 'blue', weight: 4, opacity: 0.7 }).addTo(map);
+                        } else {
+                            polylineRota.setLatLngs(latLngs);
+                        }
+
+                        // Adiciona os pontos numerados (0 verde na partida, 1, 2, 3... pretos nos seguintes)
+                        latLngs.forEach((coord, index) => {
+                            let iconeNumero = L.divIcon({
+                                className: 'numero-ponto',
+                                html: index,
+                                iconSize: [18, 18],
+                                iconAnchor: [9, 9]
+                            });
+
+                            L.marker(coord, { icon: iconeNumero })
+                             .addTo(camadaPontos)
+                             .bindPopup(`<b>Ponto ${index}</b><br>Horário: ${dados[index].timestamp}`);
+                        });
+
+                        // Pega o último ponto registrado para colocar o ícone do carro
+                        const pontoAtualCarro = latLngs[latLngs.length - 1];
+                        const ultimoDado = dados[dados.length - 1];
+
+                        // Atualiza a caixinha de informações no canto superior esquerdo
+                        document.getElementById("info").innerHTML = 
+                            `<b>Status:</b> Em movimento 🚗<br>` +
+                            `<b>Última atualização:</b> ${ultimoDado.timestamp}<br>` +
+                            `<b>Total de pontos:</b> ${dados.length}<br>` +
+                            `<b>Lat/Lng:</b> ${pontoAtualCarro[0].toFixed(4)}, ${pontoAtualCarro[1].toFixed(4)}`;
+
+                        // Configura o ícone visual do carro 🚗
+                        const iconeCarro = L.divIcon({
+                            html: '🚗',
+                            className: 'custom-car-icon',
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+
+                        // Cria ou move o marcador do carro para a posição atual exata
+                        if (!markerCarro) {
+                            markerCarro = L.marker(pontoAtualCarro, { icon: iconeCarro }).addTo(map).bindPopup("<b>Posição Atual do Veículo 🚗</b>").openPopup();
+                        } else {
+                            markerCarro.setLatLng(pontoAtualCarro);
+                        }
+
+                        // Centraliza automaticamente o mapa onde o carro está
+                        map.panTo(pontoAtualCarro);
+                    } else {
+                        document.getElementById("info").innerHTML = `<b>Status:</b> Aguardando início da viagem (Aperte Iniciar no Celular)`;
+                    }
+                })
+                .catch(err => console.error("Erro ao buscar painel:", err));
         }
 
-        function capturarEEnviar() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(position => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    
-                    document.getElementById("coords").innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
-
-                    fetch(urlAPI, {
-                        method: "POST",
-                        mode: "no-cors",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ lat: lat, lng: lng })
-                    }).catch(err => console.error("Erro no envio:", err));
-                    
-                }, error => {
-                    document.getElementById("status").innerText = "Erro no GPS: " + error.message;
-                }, { enableHighAccuracy: true });
-            } else {
-                alert("Geolocalização não suportada.");
-            }
-        }
+        window.onload = initMap;
     </script>
 </body>
 </html>
