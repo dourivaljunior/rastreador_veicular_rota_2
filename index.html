@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transmissor GPS Veicular</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f9; padding: 20px; margin: 0; }
+        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        button { width: 100%; padding: 15px; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        #btnIniciar { background-color: #28a745; }
+        #btnParar { background-color: #dc3545; display: none; }
+        #status { font-size: 16px; color: #666; margin-top: 15px; font-weight: bold; }
+        #coords { font-size: 13px; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Rastreador Veicular</h2>
+        <button id="btnIniciar" onclick="iniciarViagem()">🟢 Iniciar Viagem</button>
+        <button id="btnParar" onclick="pararViagem()">🔴 Parar Viagem</button>
+        <div id="status">Status: Aguardando início...</div>
+        <div id="coords">Lat/Lng: --</div>
+    </div>
+
+    <script>
+        const urlAPI = "https://script.google.com/macros/s/AKfycbzAACq2PAqGqiBWXM6bY04eCkJ-5-XjtbqsgFKb_MI6s92C6NJlLjhNlX_gh-02DKwN/exec";
+        let intervaloID = null;
+
+        function iniciarViagem() {
+            document.getElementById("status").innerText = "Iniciando e limpando planilha...";
+            
+            fetch(urlAPI, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ acao: "iniciar" })
+            }).then(() => {
+                document.getElementById("btnIniciar").style.display = "none";
+                document.getElementById("btnParar").style.display = "block";
+                document.getElementById("status").innerText = "Status: Transmitindo (5s)...";
+                
+                capturarEEnviar();
+                // Envio a cada 5 segundos cravados (5000 ms)
+                intervaloID = setInterval(capturarEEnviar, 5000);
+            }).catch(err => {
+                document.getElementById("status").innerText = "Erro ao iniciar!";
+                console.error(err);
+            });
+        }
+
+        function pararViagem() {
+            clearInterval(intervaloID);
+            document.getElementById("btnParar").style.display = "none";
+            document.getElementById("btnIniciar").style.display = "block";
+            document.getElementById("status").innerText = "Status: Viagem Encerrada.";
+        }
+
+        function capturarEEnviar() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    document.getElementById("coords").innerText = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+
+                    fetch(urlAPI, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lat: lat, lng: lng })
+                    }).catch(err => console.error("Erro no envio:", err));
+                    
+                }, error => {
+                    document.getElementById("status").innerText = "Erro no GPS: " + error.message;
+                }, { enableHighAccuracy: true });
+            } else {
+                alert("Geolocalização não suportada.");
+            }
+        }
+    </script>
+</body>
+</html>
