@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel de Monitoramento - Rota do Veículo</title>
+    <style>
+        html, body, #map { height: 100%; margin: 0; padding: 0; }
+        #info { position: absolute; top: 10px; left: 10px; z-index: 1000; background: white; padding: 12px; font-family: Arial, sans-serif; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); color: #333; font-size: 14px; }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div id="info">Aguardando início da viagem...</div>
+    <div id="map"></div>
+
+    <script>
+        let map;
+        let markerCarro;
+        let camadaPontos = L.layerGroup();
+        let polylineRota;
+        
+        const urlAPI = "https://script.google.com/macros/s/AKfycbzAACq2PAqGqiBWXM6bY04eCkJ-5-XjtbqsgFKb_MI6s92C6NJlLjhNlX_gh-02DKwN/exec";
+
+        function initMap() {
+            map = L.map('map').setView([-12.9632, -38.4085], 15);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+
+            camadaPontos.addTo(map);
+            
+            atualizarPainel();
+            setInterval(atualizarPainel, 5000); // Atualiza o painel a cada 5 segundos
+        }
+
+        function formatarDataLocal(dataString) {
+            if (!dataString) return 'Agora';
+            if (dataString.includes('/')) return dataString;
+            const data = new Date(dataString);
+            return data.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
+                   ' (' + data.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) + ')';
+        }
+
+        function atualizarPainel() {
+            fetch(urlAPI)
+                .then(response => response.json())
+                .then(dados => {
+                    if (Array.isArray(dados) && dados.length > 0) {
+                        camadaPontos.clearLayers();
+
+                        const latLngs = dados.map(item => [parseFloat(item.lat), parseFloat(item.lng)]);
+                        
+                        if (!polylineRota) {
+                            polylineRota = L.polyline(latLngs, { color: 'blue', weight: 4, opacity: 0.6 }).addTo(map);
+                        } else {
+                            polylineRota.setLatLngs(latLngs);
+                        }
+
+                        latLngs.forEach((coord, index) => {
+                            let corPonto = (index === 0) ? 'green' : 'black';
+                            let raioPonto = (index === 0) ? 8 : 4;
+                            
+                            L.circleMarker(coord, {
+                                radius: raioPonto,
+                                fillColor: corPonto,
+                                color: '#000',
+                                weight: 1,
+                                fillOpacity: 0.8
+                            }).addTo(camadaPontos).bindPopup(`Ponto ${index + 1} - ${dados[index].timestamp}`);
+                        });
+
+                        const ultimo = dados[dados.length - 1];
+                        const posAtual = [parseFloat(ultimo.lat), parseFloat(ultimo.lng)];
+                        const horaFormatada = formatarDataLocal(ultimo.timestamp);
+
+                        document.getElementById("info").innerHTML = 
+                            `<b>Status:</b> Em movimento 🚗<br>` +
+                            `<b>Última atualização:</b> ${horaFormatada}<br>` +
+                            `<b>Registros na rota:</b> ${dados.length}<br>` +
+                            `<b>Lat/Lng:</b> ${posAtual[0].toFixed(4)}, ${posAtual[1].toFixed(4)}`;
+
+                        const iconeCarro = L.divIcon({
+                            html: '🚗',
+                            className: 'custom-car-icon',
+                            iconSize: [30, 30],
+                            iconAnchor: [15, 15]
+                        });
+
+                        if (!markerCarro) {
+                            markerCarro = L.marker(posAtual, { icon: iconeCarro }).addTo(map).bindPopup("Veículo").openPopup();
+                        } else {
+                            markerCarro.setLatLng(posAtual);
+                        }
+
+                        map.panTo(posAtual);
+                    } else {
+                        document.getElementById("info").innerHTML = `<b>Status:</b> Aguardando início da viagem (Aperte Iniciar no Celular)`;
+                    }
+                })
+                .catch(err => console.error("Erro ao buscar painel:", err));
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
